@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-main: 'Barlow', sans-serif;
+  --prolub-red: #C41E3A;
+  --prolub-darkred: #8B0000;
+  --prolub-gold: #E8B04B;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: #F0F2F5;
+  color: #1A1A2E;
+  margin: 0;
+}
+
+.btn-primary {
+  @apply bg-prolub-red text-white font-semibold py-2.5 px-6 rounded-lg hover:bg-prolub-darkred transition-all duration-200 active:scale-95;
+}
+
+.btn-secondary {
+  @apply border border-prolub-red text-prolub-red font-semibold py-2.5 px-6 rounded-lg hover:bg-red-50 transition-all duration-200;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+}
+
+.input-field {
+  @apply w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-prolub-red focus:border-transparent transition-all;
+}
+
+.status-pendiente {
+  @apply bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full;
+}
+
+.status-aprobado {
+  @apply bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-1 rounded-full;
+}
+
+.status-rechazado {
+  @apply bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-1 rounded-full;
+}
+
+.status-ejecutado {
+  @apply bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-full;
+}
