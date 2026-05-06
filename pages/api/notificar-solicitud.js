@@ -1,6 +1,7 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 
-// Mapa de distribuidores → correo comercial asignado
+const resend = new Resend(process.env.RESEND_API_KEY)
+
 const COMERCIALES = {
   'lubricafe':       'grodriguez@prolub.com.co',
   'maquinagro':      'cblanco@prolub.com.co',
@@ -14,20 +15,40 @@ const COMERCIALES = {
   'prueba':          'msilva@prolub.com.co',
 }
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-})
-
 const formatCOP = (n) =>
-  new Intl.NumberFormat('es-CO', {
-    style: 'currency', currency: 'COP', minimumFractionDigits: 0,
-  }).format(n || 0)
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0)
+
+const emailStyle = `
+  body { margin:0; padding:0; background:#F0F2F5; font-family:'Helvetica Neue',Arial,sans-serif; }
+  .wrap { background:#F0F2F5; padding:40px 0; }
+  .card { background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); max-width:600px; margin:0 auto; }
+  .header { background:#1B3A6B; padding:0; }
+  .bar { height:5px; background:linear-gradient(90deg,#1B3A6B,#F15A22,#1B3A6B); }
+  .header-inner { padding:24px 36px; display:flex; align-items:center; gap:14px; }
+  .logo { width:52px; height:52px; border-radius:50%; border:3px solid #F15A22; background:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900; color:#1B3A6B; font-family:Arial Black; }
+  .header-text p { margin:0; }
+  .title { color:#fff; font-size:17px; font-weight:800; font-style:italic; font-family:Arial Black; }
+  .subtitle { color:rgba(255,255,255,0.6); font-size:12px; }
+  .body { padding:28px 36px; }
+  .badge { background:#FEF3C7; border-radius:20px; padding:5px 14px; display:inline-block; color:#92400E; font-size:12px; font-weight:700; margin-bottom:14px; }
+  .dist-name { font-size:22px; color:#1B3A6B; font-weight:800; font-family:Arial Black; font-style:italic; margin:0 0 4px; }
+  .sol-num { color:#6B7280; font-size:14px; margin:0 0 20px; }
+  .table { width:100%; border-collapse:collapse; background:#F9FAFB; border-radius:12px; overflow:hidden; }
+  .table-head td { padding:10px 18px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.07em; background:#F3F4F6; }
+  .table-row td { padding:12px 18px; font-size:13px; border-top:1px solid #E5E7EB; }
+  .label { color:#6B7280; width:40%; }
+  .value { color:#111827; font-weight:600; }
+  .amount { color:#F15A22; font-size:16px; font-weight:700; }
+  .email-link { color:#F15A22; }
+  .files { margin:20px 0; }
+  .files p { font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.07em; margin:0 0 10px; }
+  .file-btn { display:inline-block; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-right:8px; }
+  .cta { background:#1B3A6B; border-radius:12px; padding:20px 24px; margin-top:20px; }
+  .cta p { margin:0; color:#fff; font-size:14px; }
+  .cta .cta-label { color:rgba(255,255,255,0.6); font-size:12px; margin-bottom:4px !important; }
+  .footer { padding:16px 36px; border-top:1px solid #F3F4F6; text-align:center; }
+  .footer p { color:#9CA3AF; font-size:12px; margin:0; }
+`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' })
@@ -48,160 +69,107 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Faltan datos requeridos' })
   }
 
-  const correo_comercial = COMERCIALES[distribuidor_id] || ''
-  const fecha = new Date().toLocaleDateString('es-CO', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  })
+  const correo_comercial = COMERCIALES[distribuidor_id] || 'msilva@prolub.com.co'
+  const fecha = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+  const solNum = String(numero_solicitud).substring(0, 8).toUpperCase()
 
-  // Destinatarios: comercial + msilva (yo) + cgil (jefe)
-  const destinatarios = [
-    correo_comercial,
-    'msilva@prolub.com.co',
-    'cgil@prolub.com.co',
-  ].filter(Boolean)
+  const archivosHtml = (soporte_url || factura_url) ? `
+    <div class="files">
+      <p>Archivos adjuntos</p>
+      ${soporte_url ? `<a href="${soporte_url}" class="file-btn" style="background:#EEF2FF;color:#1B3A6B;">📎 Ver soporte</a>` : ''}
+      ${factura_url ? `<a href="${factura_url}" class="file-btn" style="background:#FFF0EA;color:#F15A22;">🧾 Ver factura</a>` : ''}
+    </div>` : ''
 
-  const htmlBody = `
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"/></head>
-<body style="margin:0;padding:0;background:#F0F2F5;font-family:'Helvetica Neue',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F2F5;padding:40px 0;">
-  <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  // Email para el equipo (yo + jefe + comercial)
+  const htmlEquipo = `
+  <html><head><style>${emailStyle}</style></head>
+  <body><div class="wrap"><div class="card">
+    <div class="header">
+      <div class="bar"></div>
+      <div class="header-inner">
+        <div class="logo">Gulf</div>
+        <div class="header-text">
+          <p class="title">PROLUB ACELERA TU CRECIMIENTO</p>
+          <p class="subtitle">${distribuidor_nombre} · Nueva Solicitud de Mercadeo</p>
+        </div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="badge">⏳ NUEVA SOLICITUD PENDIENTE DE APROBACIÓN</div>
+      <p class="dist-name">${distribuidor_nombre}</p>
+      <p class="sol-num">Solicitud N° <strong>${solNum}</strong> · ${fecha}</p>
+      <table class="table">
+        <tr class="table-head"><td colspan="2">Detalle de la solicitud</td></tr>
+        <tr class="table-row"><td class="label">Tipo de actividad</td><td class="value">${tipo_actividad}</td></tr>
+        <tr class="table-row"><td class="label">Monto solicitado</td><td class="amount">${formatCOP(monto)}</td></tr>
+        <tr class="table-row"><td class="label">Descripción</td><td class="value" style="line-height:1.6;">${descripcion}</td></tr>
+        <tr class="table-row"><td class="label">Correo contacto</td><td class="value"><a href="mailto:${correo_contacto}" class="email-link">${correo_contacto}</a></td></tr>
+      </table>
+      ${archivosHtml}
+      <div class="cta">
+        <p class="cta-label">Acción requerida</p>
+        <p>Ingresa al panel admin para aprobar o rechazar esta solicitud.</p>
+      </div>
+    </div>
+    <div class="footer"><p>© ${new Date().getFullYear()} Prolub · Gulf · Fondo de Mercadeo · Correo automático</p></div>
+  </div></div></body></html>`
 
-      <!-- Header -->
-      <tr>
-        <td style="background:#1B3A6B;padding:0;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="height:5px;background:linear-gradient(90deg,#1B3A6B,#F15A22,#1B3A6B);"></td>
-            </tr>
-          </table>
-          <table cellpadding="0" cellspacing="0" style="padding:24px 36px;">
-            <tr>
-              <td style="width:52px;height:52px;border-radius:50%;border:3px solid #F15A22;background:#fff;text-align:center;vertical-align:middle;">
-                <span style="color:#1B3A6B;font-size:18px;font-weight:900;font-family:Arial Black;">Gulf</span>
-              </td>
-              <td style="padding-left:14px;">
-                <p style="margin:0;color:#fff;font-size:17px;font-weight:800;font-family:Arial Black;font-style:italic;">PROLUB ACELERA TU CRECIMIENTO</p>
-                <p style="margin:2px 0 0;color:rgba(255,255,255,0.6);font-size:12px;">${distribuidor_nombre} · Nueva Solicitud de Mercadeo</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      <!-- Badge -->
-      <tr>
-        <td style="padding:28px 36px 0;">
-          <table cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="background:#FEF3C7;border-radius:20px;padding:5px 14px;">
-                <span style="color:#92400E;font-size:12px;font-weight:700;">⏳ NUEVA SOLICITUD PENDIENTE DE APROBACIÓN</span>
-              </td>
-            </tr>
-          </table>
-          <h2 style="margin:14px 0 4px;font-size:22px;color:#1B3A6B;font-weight:800;font-family:Arial Black;font-style:italic;">${distribuidor_nombre}</h2>
-          <p style="margin:0;color:#6B7280;font-size:14px;">Solicitud N° <strong>${String(numero_solicitud).substring(0,8).toUpperCase()}</strong> · ${fecha}</p>
-        </td>
-      </tr>
-
-      <!-- Details -->
-      <tr>
-        <td style="padding:24px 36px;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border-radius:12px;overflow:hidden;">
-            <tr style="background:#F3F4F6;">
-              <td colspan="2" style="padding:10px 18px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.07em;">Detalle de la solicitud</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;width:40%;">Tipo de actividad</td>
-              <td style="padding:12px 18px;font-size:13px;color:#111827;font-weight:600;">${tipo_actividad}</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;">Monto solicitado</td>
-              <td style="padding:12px 18px;font-size:16px;color:#F15A22;font-weight:700;">${formatCOP(monto)}</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;vertical-align:top;">Descripción</td>
-              <td style="padding:12px 18px;font-size:13px;color:#374151;line-height:1.6;">${descripcion}</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;">Correo de contacto</td>
-              <td style="padding:12px 18px;font-size:13px;color:#1B3A6B;font-weight:600;">
-                <a href="mailto:${correo_contacto}" style="color:#F15A22;">${correo_contacto}</a>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      <!-- Attachments -->
-      ${soporte_url || factura_url ? `
-      <tr>
-        <td style="padding:0 36px 24px;">
-          <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.07em;">Archivos adjuntos</p>
-          <table cellpadding="0" cellspacing="0"><tr>
-            ${soporte_url ? `<td style="padding-right:8px;"><a href="${soporte_url}" style="display:inline-block;background:#EEF2FF;color:#1B3A6B;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;text-decoration:none;">📎 Ver soporte</a></td>` : ''}
-            ${factura_url ? `<td><a href="${factura_url}" style="display:inline-block;background:#FFF0EA;color:#F15A22;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;text-decoration:none;">🧾 Ver factura</a></td>` : ''}
-          </tr></table>
-        </td>
-      </tr>` : ''}
-
-      <!-- CTA -->
-      <tr>
-        <td style="padding:0 36px 36px;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#1B3A6B;border-radius:12px;padding:20px 24px;">
-            <tr>
-              <td>
-                <p style="margin:0 0 4px;color:rgba(255,255,255,0.6);font-size:12px;">Acción requerida</p>
-                <p style="margin:0;color:#fff;font-size:14px;font-weight:500;">Ingresa al panel admin para aprobar o rechazar esta solicitud. Puedes responder directamente al correo de contacto del distribuidor.</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      <!-- Footer -->
-      <tr>
-        <td style="padding:16px 36px;border-top:1px solid #F3F4F6;text-align:center;">
-          <p style="margin:0;color:#9CA3AF;font-size:12px;">© ${new Date().getFullYear()} Prolub · Gulf · Fondo de Mercadeo · Correo automático</p>
-        </td>
-      </tr>
-
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>`
-
-  const textoPlano = `
-PROLUB · GULF — Nueva solicitud de fondo de mercadeo
-
-Distribuidor: ${distribuidor_nombre}
-Tipo: ${tipo_actividad}
-Monto: ${formatCOP(monto)}
-Fecha: ${fecha}
-N° Solicitud: ${String(numero_solicitud).substring(0,8).toUpperCase()}
-Correo de contacto: ${correo_contacto}
-
-Descripción:
-${descripcion}
-
-${soporte_url ? `Soporte: ${soporte_url}` : ''}
-${factura_url ? `Factura: ${factura_url}` : ''}
-`.trim()
+  // Email de confirmación para el distribuidor
+  const htmlDistribuidor = `
+  <html><head><style>${emailStyle}</style></head>
+  <body><div class="wrap"><div class="card">
+    <div class="header">
+      <div class="bar"></div>
+      <div class="header-inner">
+        <div class="logo">Gulf</div>
+        <div class="header-text">
+          <p class="title">PROLUB ACELERA TU CRECIMIENTO</p>
+          <p class="subtitle">Confirmación de solicitud recibida</p>
+        </div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="badge" style="background:#DBEAFE;color:#1e40af;">📋 SOLICITUD EN EVALUACIÓN</div>
+      <p class="dist-name">${distribuidor_nombre}</p>
+      <p class="sol-num">Solicitud N° <strong>${solNum}</strong> · ${fecha}</p>
+      <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+        Hemos recibido tu solicitud de mercadeo. Nuestro equipo la está evaluando y te notificaremos la decisión a este correo a la brevedad.
+      </p>
+      <table class="table">
+        <tr class="table-head"><td colspan="2">Resumen de tu solicitud</td></tr>
+        <tr class="table-row"><td class="label">Tipo de actividad</td><td class="value">${tipo_actividad}</td></tr>
+        <tr class="table-row"><td class="label">Monto solicitado</td><td class="amount">${formatCOP(monto)}</td></tr>
+        <tr class="table-row"><td class="label">Descripción</td><td class="value" style="line-height:1.6;">${descripcion}</td></tr>
+      </table>
+      <div class="cta">
+        <p class="cta-label">¿Tienes preguntas?</p>
+        <p>Contacta a tu ejecutivo comercial Prolub o ingresa a la plataforma para hacer seguimiento.</p>
+      </div>
+    </div>
+    <div class="footer"><p>© ${new Date().getFullYear()} Prolub · Gulf · Fondo de Mercadeo · Correo automático</p></div>
+  </div></div></body></html>`
 
   try {
-    await transporter.sendMail({
-      from: `"Prolub Mercadeo Gulf" <${process.env.SMTP_USER}>`,
-      to: destinatarios.join(', '),
-      replyTo: correo_contacto, // responder va directo al distribuidor
-      subject: `Prolub Acelera tu Crecimiento · ${distribuidor_nombre} — Nueva solicitud de mercadeo`,
-      text: textoPlano,
-      html: htmlBody,
+    // Enviar al equipo
+    await resend.emails.send({
+      from: 'Prolub Mercadeo <onboarding@resend.dev>',
+      to: ['msilva@prolub.com.co', 'cgil@prolub.com.co', correo_comercial].filter(Boolean),
+      reply_to: correo_contacto,
+      subject: `Prolub Acelera tu Crecimiento · ${distribuidor_nombre} — Nueva solicitud`,
+      html: htmlEquipo,
     })
 
-    return res.status(200).json({ ok: true, destinatarios })
+    // Enviar confirmación al distribuidor
+    if (correo_contacto) {
+      await resend.emails.send({
+        from: 'Prolub Mercadeo <onboarding@resend.dev>',
+        to: [correo_contacto],
+        subject: `Tu solicitud está siendo evaluada — ${distribuidor_nombre}`,
+        html: htmlDistribuidor,
+      })
+    }
+
+    return res.status(200).json({ ok: true })
   } catch (error) {
     console.error('Error enviando correo:', error)
     return res.status(500).json({ error: 'Error al enviar el correo', detalle: error.message })
