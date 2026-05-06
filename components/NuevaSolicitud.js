@@ -37,29 +37,33 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
     if (!form.descripcion || form.descripcion.length < 20) { toast.error('La descripción debe tener al menos 20 caracteres.'); return }
     if (!form.monto_solicitado || isNaN(Number(form.monto_solicitado))) { toast.error('Ingresa un monto válido.'); return }
     if (!form.correo_contacto || !form.correo_contacto.includes('@')) { toast.error('Ingresa un correo de contacto válido.'); return }
-    if (!fileSoporte) { toast.error('Adjunta el soporte de la actividad.'); return }
-    if (!fileFactura) { toast.error('Adjunta la factura o cotización.'); return }
 
     const monto = Number(form.monto_solicitado)
-    if (monto > saldoDisponible) { toast.error(`El monto supera tu saldo disponible (${formatCOP(saldoDisponible)}).`); return }
-
     setLoading(true)
 
     try {
-      // 1. Subir soporte
-      const soportePath = `${distribuidorId}/${Date.now()}_soporte_${fileSoporte.name}`
-      const { error: err1 } = await supabase.storage.from('solicitudes-archivos').upload(soportePath, fileSoporte)
-      if (err1) throw new Error('Error subiendo soporte: ' + err1.message)
+      let soporteUrl = null
+      let facturaUrl = null
 
-      // 2. Subir factura
-      const facturaPath = `${distribuidorId}/${Date.now()}_factura_${fileFactura.name}`
-      const { error: err2 } = await supabase.storage.from('solicitudes-archivos').upload(facturaPath, fileFactura)
-      if (err2) throw new Error('Error subiendo factura: ' + err2.message)
+      // Subir soporte si existe
+      if (fileSoporte) {
+        const soportePath = `${distribuidorId}/${Date.now()}_soporte_${fileSoporte.name}`
+        const { error: err1 } = await supabase.storage.from('solicitudes-archivos').upload(soportePath, fileSoporte)
+        if (err1) throw new Error('Error subiendo soporte: ' + err1.message)
+        const { data: url1 } = supabase.storage.from('solicitudes-archivos').getPublicUrl(soportePath)
+        soporteUrl = url1.publicUrl
+      }
 
-      const { data: urlSoporte } = supabase.storage.from('solicitudes-archivos').getPublicUrl(soportePath)
-      const { data: urlFactura } = supabase.storage.from('solicitudes-archivos').getPublicUrl(facturaPath)
+      // Subir factura si existe
+      if (fileFactura) {
+        const facturaPath = `${distribuidorId}/${Date.now()}_factura_${fileFactura.name}`
+        const { error: err2 } = await supabase.storage.from('solicitudes-archivos').upload(facturaPath, fileFactura)
+        if (err2) throw new Error('Error subiendo factura: ' + err2.message)
+        const { data: url2 } = supabase.storage.from('solicitudes-archivos').getPublicUrl(facturaPath)
+        facturaUrl = url2.publicUrl
+      }
 
-      // 3. Insertar solicitud
+      // Insertar solicitud
       const { data: solicitud, error: err3 } = await supabase
         .from('solicitudes')
         .insert({
@@ -69,8 +73,8 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
           monto_solicitado: monto,
           correo_contacto: form.correo_contacto,
           observaciones: form.observaciones,
-          soporte_url: urlSoporte.publicUrl,
-          factura_url: urlFactura.publicUrl,
+          soporte_url: soporteUrl,
+          factura_url: facturaUrl,
           estado: 'pendiente',
         })
         .select()
@@ -78,7 +82,7 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
 
       if (err3) throw new Error('Error creando solicitud: ' + err3.message)
 
-      // 4. Enviar correo
+      // Enviar correo
       try {
         await enviarNotificacionSolicitud({
           distribuidor_id: distribuidorId,
@@ -88,8 +92,8 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
           monto,
           correo_contacto: form.correo_contacto,
           numero_solicitud: solicitud.id,
-          soporte_url: urlSoporte.publicUrl,
-          factura_url: urlFactura.publicUrl,
+          soporte_url: soporteUrl,
+          factura_url: facturaUrl,
         })
       } catch (emailErr) {
         console.error('Email error (non-blocking):', emailErr)
@@ -111,7 +115,9 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
           <div className="w-8 h-8 bg-[#F15A22] rounded-lg flex items-center justify-center text-white text-sm font-bold">+</div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Nueva solicitud de mercadeo</h2>
-            <p className="text-xs text-gray-500">Saldo disponible: <span className="font-semibold text-[#F15A22]">{formatCOP(saldoDisponible)}</span></p>
+            <p className="text-xs text-gray-500">
+              Saldo disponible: <span className="font-semibold text-[#F15A22]">{formatCOP(saldoDisponible)}</span>
+            </p>
           </div>
         </div>
 
@@ -174,12 +180,9 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
                 required
               />
             </div>
-            {form.monto_solicitado && Number(form.monto_solicitado) > saldoDisponible && (
-              <p className="text-xs text-red-500 mt-1">⚠ Supera tu saldo disponible</p>
-            )}
           </div>
 
-          {/* Correo de contacto */}
+          {/* Correo contacto */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1.5">
               Correo de contacto <span className="text-red-500">*</span>
@@ -209,24 +212,27 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
             />
           </div>
 
-          {/* Archivos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FileUpload
-              label="Soporte de actividad"
-              hint="Cotización, propuesta o brief"
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              file={fileSoporte}
-              onChange={setFileSoporte}
-              required
-            />
-            <FileUpload
-              label="Factura / Cotización"
-              hint="PDF o imagen de la factura"
-              accept=".pdf,.jpg,.jpeg,.png"
-              file={fileFactura}
-              onChange={setFileFactura}
-              required
-            />
+          {/* Archivos opcionales */}
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-2">
+              Archivos adjuntos <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FileUpload
+                label="Soporte de actividad"
+                hint="Cotización, propuesta o brief"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                file={fileSoporte}
+                onChange={setFileSoporte}
+              />
+              <FileUpload
+                label="Factura / Cotización"
+                hint="PDF o imagen de la factura"
+                accept=".pdf,.jpg,.jpeg,.png"
+                file={fileFactura}
+                onChange={setFileFactura}
+              />
+            </div>
           </div>
 
           {/* Resumen */}
@@ -258,7 +264,7 @@ export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, sal
   )
 }
 
-function FileUpload({ label, hint, accept, file, onChange, required }) {
+function FileUpload({ label, hint, accept, file, onChange }) {
   const handleChange = (e) => {
     const f = e.target.files?.[0]
     if (f) {
@@ -269,9 +275,7 @@ function FileUpload({ label, hint, accept, file, onChange, required }) {
 
   return (
     <div>
-      <label className="text-sm font-semibold text-gray-700 block mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
+      <label className="text-sm font-medium text-gray-600 block mb-1.5">{label}</label>
       <label className={`flex flex-col items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
         file ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
       }`}>
@@ -284,8 +288,8 @@ function FileUpload({ label, hint, accept, file, onChange, required }) {
         ) : (
           <div className="text-center">
             <p className="text-2xl mb-1">📎</p>
-            <p className="text-xs text-gray-600 font-medium">{label}</p>
-            <p className="text-xs text-gray-400">{hint}</p>
+            <p className="text-xs text-gray-500 font-medium">{hint}</p>
+            <p className="text-xs text-gray-400">Opcional</p>
           </div>
         )}
       </label>
