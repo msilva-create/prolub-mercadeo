@@ -1,24 +1,27 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
-import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 
-const DISTRIBUIDORES = [
-  { nombre: 'CENTRAL GULF',            email: 'central.gulf@prolub.com' },
-  { nombre: 'LUBRICAFE',               email: 'lubricafe@prolub.com' },
-  { nombre: 'MAQUINAGRO',              email: 'maquinagro@prolub.com' },
-  { nombre: 'JAIRO SÁNCHEZ',           email: 'jairosanchez@prolub.com' },
-  { nombre: 'UNIVERSAL',               email: 'universal@prolub.com' },
-  { nombre: 'DISTRIBUIDORA LOS LAGOS', email: 'loslagos@prolub.com' },
-  { nombre: 'GRUPO MOTOR',             email: 'grupomotor@prolub.com' },
-  { nombre: 'RAMOS DISTRIBUCIONES',    email: 'ramosdist@prolub.com' },
-  { nombre: 'PRUEBA',                  email: 'prueba@prolub.com' },
-  { nombre: 'CVC SERVITECAS',          email: 'cvcservitecas@prolub.com' },
+// Distribuidores y sus contraseñas — cambia las contraseñas aquí cuando quieras
+export const DISTRIBUIDORES = [
+  { id: 'central-gulf',    nombre: 'CENTRAL GULF',             password: 'Gulf2024*CG' },
+  { id: 'lubricafe',       nombre: 'LUBRICAFE',                password: 'Gulf2024*LC' },
+  { id: 'maquinagro',      nombre: 'MAQUINAGRO',               password: 'Gulf2024*MQ' },
+  { id: 'jairo-sanchez',   nombre: 'JAIRO SÁNCHEZ',            password: 'Gulf2024*JS' },
+  { id: 'universal',       nombre: 'UNIVERSAL',                password: 'Gulf2024*UV' },
+  { id: 'los-lagos',       nombre: 'DISTRIBUIDORA LOS LAGOS',  password: 'Gulf2024*LL' },
+  { id: 'grupo-motor',     nombre: 'GRUPO MOTOR',              password: 'Gulf2024*GM' },
+  { id: 'ramos-dist',      nombre: 'RAMOS DISTRIBUCIONES',     password: 'Gulf2024*RD' },
+  { id: 'prueba',          nombre: 'PRUEBA',                   password: 'Gulf2024*PR' },
+  { id: 'cvc-servitecas',  nombre: 'CVC SERVITECAS',           password: 'Gulf2024*CV' },
 ]
+
+// Contraseña del admin
+export const ADMIN_PASSWORD = 'Admin2024*PL'
 
 export default function Login() {
   const router = useRouter()
-  const [step, setStep] = useState('select')
+  const [step, setStep] = useState('select') // select | password
   const [distribuidor, setDistribuidor] = useState(null)
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -28,33 +31,29 @@ export default function Login() {
     setStep('password')
   }
 
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault()
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: distribuidor.email,
-      password,
-    })
-
-    if (error) {
-      toast.error('Contraseña incorrecta. Intenta de nuevo.')
-      setLoading(false)
+    // Check admin
+    if (password === ADMIN_PASSWORD) {
+      sessionStorage.setItem('prolub_user', JSON.stringify({ rol: 'admin', nombre: 'Admin' }))
+      router.push('/admin')
       return
     }
 
-    const { data: perfil } = await supabase
-      .from('distribuidores')
-      .select('rol')
-      .eq('auth_user_id', data.user.id)
-      .single()
-
-    if (perfil?.rol === 'admin') {
-      router.push('/admin')
-    } else {
+    // Check distribuidor
+    if (password === distribuidor.password) {
+      sessionStorage.setItem('prolub_user', JSON.stringify({
+        rol: 'distribuidor',
+        id: distribuidor.id,
+        nombre: distribuidor.nombre,
+      }))
       router.push('/dashboard')
+      return
     }
 
+    toast.error('Contraseña incorrecta. Intenta de nuevo.')
     setLoading(false)
   }
 
@@ -64,7 +63,7 @@ export default function Login() {
 
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-12">
 
-        {/* Logo */}
+        {/* Logo Gulf */}
         <div className="mb-8 text-center">
           <div className="inline-flex items-center justify-center w-24 h-24 rounded-full border-4 border-[#1B3A6B] bg-white shadow-lg mb-5">
             <svg viewBox="0 0 100 100" width="72" height="72">
@@ -80,7 +79,7 @@ export default function Login() {
           {step === 'select' ? (
             <>
               <h1 className="text-3xl font-black text-[#1B3A6B] italic"
-                style={{ fontFamily: 'Arial Black, sans-serif', letterSpacing: '-0.01em' }}>
+                style={{ fontFamily: 'Arial Black, sans-serif' }}>
                 GULF APOYA TU NEGOCIO
               </h1>
               <p className="text-gray-400 text-sm mt-2 max-w-sm mx-auto">
@@ -106,14 +105,15 @@ export default function Login() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {DISTRIBUIDORES.map((dist) => (
                 <button
-                  key={dist.email}
+                  key={dist.id}
                   onClick={() => handleSelect(dist)}
                   className="group bg-white border-2 border-gray-100 rounded-xl p-4 text-left hover:border-[#F15A22] hover:shadow-md transition-all duration-200 active:scale-95"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-[#EEF2FF] flex items-center justify-center flex-shrink-0 group-hover:bg-[#FFF0EA] transition-colors">
                       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                        <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10" stroke="#1B3A6B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"
+                          stroke="#1B3A6B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </div>
                     <div>
@@ -155,7 +155,7 @@ export default function Login() {
                   {loading && (
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
-                  {loading ? 'INGRESANDO...' : 'INGRESAR A LA PLATAFORMA →'}
+                  INGRESAR A LA PLATAFORMA →
                 </button>
 
                 <button
