@@ -1,19 +1,37 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-})
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 const formatCOP = (n) =>
-  new Intl.NumberFormat('es-CO', {
-    style: 'currency', currency: 'COP', minimumFractionDigits: 0,
-  }).format(n || 0)
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0)
+
+const emailStyle = `
+  body { margin:0; padding:0; background:#F0F2F5; font-family:'Helvetica Neue',Arial,sans-serif; }
+  .wrap { background:#F0F2F5; padding:40px 0; }
+  .card { background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); max-width:600px; margin:0 auto; }
+  .header { background:#1B3A6B; }
+  .bar { height:5px; background:linear-gradient(90deg,#1B3A6B,#F15A22,#1B3A6B); }
+  .header-inner { padding:24px 36px; display:flex; align-items:center; gap:14px; }
+  .logo { width:52px; height:52px; border-radius:50%; border:3px solid #F15A22; background:#fff; text-align:center; line-height:52px; font-size:16px; font-weight:900; color:#1B3A6B; font-family:Arial Black; }
+  .title { color:#fff; font-size:17px; font-weight:800; font-style:italic; font-family:Arial Black; margin:0; }
+  .subtitle { color:rgba(255,255,255,0.6); font-size:12px; margin:2px 0 0; }
+  .body { padding:28px 36px; }
+  .dist-name { font-size:22px; color:#1B3A6B; font-weight:800; font-family:Arial Black; font-style:italic; margin:14px 0 4px; }
+  .sol-num { color:#6B7280; font-size:14px; margin:0 0 20px; }
+  .msg { font-size:15px; color:#374151; line-height:1.7; margin:0 0 20px; }
+  .table { width:100%; border-collapse:collapse; background:#F9FAFB; border-radius:12px; overflow:hidden; }
+  .table-head td { padding:10px 18px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.07em; background:#F3F4F6; }
+  .table-row td { padding:12px 18px; font-size:13px; border-top:1px solid #E5E7EB; }
+  .label { color:#6B7280; width:40%; }
+  .value { color:#111827; font-weight:600; }
+  .amount { color:#F15A22; font-size:16px; font-weight:700; }
+  .nota { font-style:italic; color:#374151; }
+  .cta { background:#1B3A6B; border-radius:12px; padding:20px 24px; margin-top:20px; }
+  .cta-label { color:rgba(255,255,255,0.6); font-size:12px; margin:0 0 4px; }
+  .cta-text { color:#fff; font-size:14px; margin:0; }
+  .footer { padding:16px 36px; border-top:1px solid #F3F4F6; text-align:center; }
+  .footer p { color:#9CA3AF; font-size:12px; margin:0; }
+`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' })
@@ -32,145 +50,63 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Faltan datos requeridos' })
   }
 
+  const fecha = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+  const solNum = String(numero_solicitud).substring(0, 8).toUpperCase()
+
   const esAprobado = estado === 'aprobado'
   const esRechazado = estado === 'rechazado'
   const esEjecutado = estado === 'ejecutado'
 
-  const fecha = new Date().toLocaleDateString('es-CO', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  })
-
   const estadoTexto = esAprobado ? 'APROBADA ✅' : esEjecutado ? 'EJECUTADA 🚀' : 'RECHAZADA ❌'
-  const colorEstado = esAprobado ? '#16A34A' : esEjecutado ? '#2563EB' : '#DC2626'
-  const bgEstado = esAprobado ? '#F0FDF4' : esEjecutado ? '#EFF6FF' : '#FEF2F2'
+  const badgeColor = esAprobado ? '#F0FDF4' : esEjecutado ? '#EFF6FF' : '#FEF2F2'
+  const badgeText = esAprobado ? '#16A34A' : esEjecutado ? '#2563EB' : '#DC2626'
 
   const mensaje = esAprobado
-    ? 'Tu solicitud ha sido <strong>aprobada</strong>. El equipo Prolub Gulf coordinará contigo los próximos pasos para ejecutar la actividad.'
+    ? 'Tu solicitud ha sido <strong>aprobada</strong>. El equipo Prolub Gulf coordinará contigo los próximos pasos.'
     : esEjecutado
-    ? 'Tu solicitud ha sido <strong>ejecutada</strong>. La actividad de mercadeo ha sido procesada exitosamente.'
-    : 'Tu solicitud ha sido <strong>rechazada</strong>. Puedes contactar a tu ejecutivo comercial Prolub para más información o para presentar una nueva solicitud.'
+    ? 'Tu solicitud ha sido <strong>ejecutada</strong>. La actividad de mercadeo fue procesada exitosamente.'
+    : 'Tu solicitud ha sido <strong>rechazada</strong>. Puedes contactar a tu ejecutivo comercial para más información.'
 
-  const htmlBody = `
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"/></head>
-<body style="margin:0;padding:0;background:#F0F2F5;font-family:'Helvetica Neue',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F2F5;padding:40px 0;">
-  <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-
-      <!-- Header -->
-      <tr>
-        <td style="background:#1B3A6B;padding:0;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="height:5px;background:linear-gradient(90deg,#1B3A6B,#F15A22,#1B3A6B);"></td></tr>
-          </table>
-          <table cellpadding="0" cellspacing="0" style="padding:24px 36px;">
-            <tr>
-              <td style="width:52px;height:52px;border-radius:50%;border:3px solid #F15A22;background:#fff;text-align:center;vertical-align:middle;">
-                <span style="color:#1B3A6B;font-size:16px;font-weight:900;font-family:Arial Black;">Gulf</span>
-              </td>
-              <td style="padding-left:14px;">
-                <p style="margin:0;color:#fff;font-size:17px;font-weight:800;font-family:Arial Black;font-style:italic;">GULF APOYA TU NEGOCIO</p>
-                <p style="margin:2px 0 0;color:rgba(255,255,255,0.6);font-size:12px;">Fondo de Mercadeo · Actualización de solicitud</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      <!-- Estado badge -->
-      <tr>
-        <td style="padding:28px 36px 0;">
-          <table cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="background:${bgEstado};border-radius:20px;padding:6px 16px;">
-                <span style="color:${colorEstado};font-size:13px;font-weight:700;">Solicitud ${estadoTexto}</span>
-              </td>
-            </tr>
-          </table>
-          <h2 style="margin:14px 0 4px;font-size:22px;color:#1B3A6B;font-weight:800;font-family:Arial Black;font-style:italic;">${distribuidor_nombre}</h2>
-          <p style="margin:0;color:#6B7280;font-size:14px;">Solicitud N° <strong>${String(numero_solicitud).substring(0,8).toUpperCase()}</strong> · ${fecha}</p>
-        </td>
-      </tr>
-
-      <!-- Mensaje principal -->
-      <tr>
-        <td style="padding:24px 36px 0;">
-          <p style="margin:0;font-size:15px;color:#374151;line-height:1.7;">${mensaje}</p>
-        </td>
-      </tr>
-
-      <!-- Detalle solicitud -->
-      <tr>
-        <td style="padding:20px 36px;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border-radius:12px;overflow:hidden;">
-            <tr style="background:#F3F4F6;">
-              <td colspan="2" style="padding:10px 18px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.07em;">Tu solicitud</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;width:40%;">Tipo de actividad</td>
-              <td style="padding:12px 18px;font-size:13px;color:#111827;font-weight:600;">${tipo_actividad}</td>
-            </tr>
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;">Monto solicitado</td>
-              <td style="padding:12px 18px;font-size:16px;color:#F15A22;font-weight:700;">${formatCOP(monto)}</td>
-            </tr>
-            ${nota_admin ? `
-            <tr style="border-top:1px solid #E5E7EB;">
-              <td style="padding:12px 18px;font-size:13px;color:#6B7280;vertical-align:top;">Nota del equipo Prolub</td>
-              <td style="padding:12px 18px;font-size:13px;color:#374151;line-height:1.6;font-style:italic;">"${nota_admin}"</td>
-            </tr>` : ''}
-          </table>
-        </td>
-      </tr>
-
-      <!-- CTA -->
-      <tr>
-        <td style="padding:0 36px 36px;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#1B3A6B;border-radius:12px;padding:20px 24px;">
-            <tr>
-              <td>
-                <p style="margin:0 0 4px;color:rgba(255,255,255,0.6);font-size:12px;">¿Tienes preguntas?</p>
-                <p style="margin:0;color:#fff;font-size:14px;">Contáctate con tu ejecutivo comercial Prolub o ingresa a la plataforma para ver el estado de tus solicitudes.</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      <!-- Footer -->
-      <tr>
-        <td style="padding:16px 36px;border-top:1px solid #F3F4F6;text-align:center;">
-          <p style="margin:0;color:#9CA3AF;font-size:12px;">© ${new Date().getFullYear()} Prolub · Gulf · Fondo de Mercadeo · Correo automático</p>
-        </td>
-      </tr>
-
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>`
-
-  const textoPlano = `
-PROLUB · GULF — Actualización de tu solicitud
-
-Distribuidor: ${distribuidor_nombre}
-Solicitud N°: ${String(numero_solicitud).substring(0,8).toUpperCase()}
-Estado: ${estadoTexto}
-Tipo: ${tipo_actividad}
-Monto: ${formatCOP(monto)}
-Fecha: ${fecha}
-${nota_admin ? `\nNota del equipo Prolub: ${nota_admin}` : ''}
-`.trim()
+  const html = `
+  <html><head><style>${emailStyle}</style></head>
+  <body><div class="wrap"><div class="card">
+    <div class="header">
+      <div class="bar"></div>
+      <div class="header-inner">
+        <div class="logo">Gulf</div>
+        <div>
+          <p class="title">PROLUB ACELERA TU CRECIMIENTO</p>
+          <p class="subtitle">Actualización de tu solicitud de mercadeo</p>
+        </div>
+      </div>
+    </div>
+    <div class="body">
+      <div style="background:${badgeColor};border-radius:20px;padding:5px 14px;display:inline-block;color:${badgeText};font-size:13px;font-weight:700;">
+        Solicitud ${estadoTexto}
+      </div>
+      <p class="dist-name">${distribuidor_nombre}</p>
+      <p class="sol-num">Solicitud N° <strong>${solNum}</strong> · ${fecha}</p>
+      <p class="msg">${mensaje}</p>
+      <table class="table">
+        <tr class="table-head"><td colspan="2">Tu solicitud</td></tr>
+        <tr class="table-row"><td class="label">Tipo de actividad</td><td class="value">${tipo_actividad}</td></tr>
+        <tr class="table-row"><td class="label">Monto solicitado</td><td class="amount">${formatCOP(monto)}</td></tr>
+        ${nota_admin ? `<tr class="table-row"><td class="label">Nota del equipo</td><td class="nota">"${nota_admin}"</td></tr>` : ''}
+      </table>
+      <div class="cta">
+        <p class="cta-label">¿Tienes preguntas?</p>
+        <p class="cta-text">Contacta a tu ejecutivo comercial Prolub o ingresa a la plataforma.</p>
+      </div>
+    </div>
+    <div class="footer"><p>© ${new Date().getFullYear()} Prolub · Gulf · Fondo de Mercadeo</p></div>
+  </div></div></body></html>`
 
   try {
-    await transporter.sendMail({
-      from: `"Prolub Mercadeo Gulf" <${process.env.SMTP_USER}>`,
-      to: correo_contacto,
-      subject: `[Prolub] Tu solicitud fue ${estadoTexto} — ${distribuidor_nombre}`,
-      text: textoPlano,
-      html: htmlBody,
+    await resend.emails.send({
+      from: 'Prolub Mercadeo <onboarding@resend.dev>',
+      to: [correo_contacto],
+      subject: `Tu solicitud fue ${estadoTexto} — ${distribuidor_nombre}`,
+      html,
     })
 
     return res.status(200).json({ ok: true })
