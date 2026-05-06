@@ -16,78 +16,58 @@ const TIPOS_ACTIVIDAD = [
 const formatCOP = (n) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0)
 
-export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada }) {
+export default function NuevaSolicitud({ distribuidorId, distribuidorNombre, saldoDisponible, onCreada }) {
   const [form, setForm] = useState({
     tipo_actividad: '',
     descripcion: '',
     monto_solicitado: '',
+    correo_contacto: '',
     observaciones: '',
   })
   const [fileSoporte, setFileSoporte] = useState(null)
   const [fileFactura, setFileFactura] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState(1)
 
-  const handleField = (key, value) => setForm((f) => ({ ...f, [key]: value }))
+  const handleField = (key, value) => setForm(f => ({ ...f, [key]: value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!form.tipo_actividad) {
-      toast.error('Selecciona el tipo de actividad.')
-      return
-    }
-    if (!form.descripcion || form.descripcion.length < 20) {
-      toast.error('La descripción debe tener al menos 20 caracteres.')
-      return
-    }
-    if (!form.monto_solicitado || isNaN(Number(form.monto_solicitado))) {
-      toast.error('Ingresa un monto válido.')
-      return
-    }
+    if (!form.tipo_actividad) { toast.error('Selecciona el tipo de actividad.'); return }
+    if (!form.descripcion || form.descripcion.length < 20) { toast.error('La descripción debe tener al menos 20 caracteres.'); return }
+    if (!form.monto_solicitado || isNaN(Number(form.monto_solicitado))) { toast.error('Ingresa un monto válido.'); return }
+    if (!form.correo_contacto || !form.correo_contacto.includes('@')) { toast.error('Ingresa un correo de contacto válido.'); return }
+    if (!fileSoporte) { toast.error('Adjunta el soporte de la actividad.'); return }
+    if (!fileFactura) { toast.error('Adjunta la factura o cotización.'); return }
+
     const monto = Number(form.monto_solicitado)
-    if (monto > saldoDisponible) {
-      toast.error(`El monto supera tu saldo disponible (${formatCOP(saldoDisponible)}).`)
-      return
-    }
-    if (!fileSoporte) {
-      toast.error('Adjunta el soporte de la actividad.')
-      return
-    }
-    if (!fileFactura) {
-      toast.error('Adjunta la factura o cotización.')
-      return
-    }
+    if (monto > saldoDisponible) { toast.error(`El monto supera tu saldo disponible (${formatCOP(saldoDisponible)}).`); return }
 
     setLoading(true)
 
     try {
-      // 1. Upload soporte
-      const soportePath = `${distribuidor.id}/${Date.now()}_soporte_${fileSoporte.name}`
-      const { error: err1 } = await supabase.storage
-        .from('solicitudes-archivos')
-        .upload(soportePath, fileSoporte)
+      // 1. Subir soporte
+      const soportePath = `${distribuidorId}/${Date.now()}_soporte_${fileSoporte.name}`
+      const { error: err1 } = await supabase.storage.from('solicitudes-archivos').upload(soportePath, fileSoporte)
       if (err1) throw new Error('Error subiendo soporte: ' + err1.message)
 
-      // 2. Upload factura
-      const facturaPath = `${distribuidor.id}/${Date.now()}_factura_${fileFactura.name}`
-      const { error: err2 } = await supabase.storage
-        .from('solicitudes-archivos')
-        .upload(facturaPath, fileFactura)
+      // 2. Subir factura
+      const facturaPath = `${distribuidorId}/${Date.now()}_factura_${fileFactura.name}`
+      const { error: err2 } = await supabase.storage.from('solicitudes-archivos').upload(facturaPath, fileFactura)
       if (err2) throw new Error('Error subiendo factura: ' + err2.message)
 
-      // 3. Get signed URLs
       const { data: urlSoporte } = supabase.storage.from('solicitudes-archivos').getPublicUrl(soportePath)
       const { data: urlFactura } = supabase.storage.from('solicitudes-archivos').getPublicUrl(facturaPath)
 
-      // 4. Insert solicitud
+      // 3. Insertar solicitud
       const { data: solicitud, error: err3 } = await supabase
         .from('solicitudes')
         .insert({
-          distribuidor_id: distribuidor.id,
+          distribuidor_id: distribuidorId,
           tipo_actividad: form.tipo_actividad,
           descripcion: form.descripcion,
           monto_solicitado: monto,
+          correo_contacto: form.correo_contacto,
           observaciones: form.observaciones,
           soporte_url: urlSoporte.publicUrl,
           factura_url: urlFactura.publicUrl,
@@ -98,14 +78,15 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
 
       if (err3) throw new Error('Error creando solicitud: ' + err3.message)
 
-      // 5. Send email notification
+      // 4. Enviar correo
       try {
         await enviarNotificacionSolicitud({
-          distribuidor: distribuidor.razon_social,
+          distribuidor_id: distribuidorId,
+          distribuidor_nombre: distribuidorNombre,
           tipo_actividad: form.tipo_actividad,
           descripcion: form.descripcion,
           monto,
-          correo_comercial: distribuidor.correo_comercial,
+          correo_contacto: form.correo_contacto,
           numero_solicitud: solicitud.id,
           soporte_url: urlSoporte.publicUrl,
           factura_url: urlFactura.publicUrl,
@@ -114,7 +95,7 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
         console.error('Email error (non-blocking):', emailErr)
       }
 
-      toast.success('¡Solicitud enviada exitosamente! Tu equipo comercial será notificado.')
+      toast.success('¡Solicitud enviada! Tu equipo comercial fue notificado.')
       onCreada()
     } catch (error) {
       toast.error(error.message || 'Error al enviar la solicitud.')
@@ -127,16 +108,16 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
     <div className="max-w-2xl">
       <div className="card">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-8 h-8 bg-prolub-red rounded-lg flex items-center justify-center text-white text-sm font-bold">+</div>
+          <div className="w-8 h-8 bg-[#F15A22] rounded-lg flex items-center justify-center text-white text-sm font-bold">+</div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Nueva solicitud de mercadeo</h2>
-            <p className="text-xs text-gray-500">Saldo disponible: <span className="font-semibold text-green-600">{formatCOP(saldoDisponible)}</span></p>
+            <p className="text-xs text-gray-500">Saldo disponible: <span className="font-semibold text-[#F15A22]">{formatCOP(saldoDisponible)}</span></p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
-          {/* Step 1: Tipo actividad */}
+          {/* Tipo */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-2">
               Tipo de actividad <span className="text-red-500">*</span>
@@ -149,7 +130,7 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
                   onClick={() => handleField('tipo_actividad', tipo.value)}
                   className={`text-left px-4 py-3 rounded-lg border transition-all ${
                     form.tipo_actividad === tipo.value
-                      ? 'border-prolub-red bg-red-50 ring-1 ring-prolub-red'
+                      ? 'border-[#F15A22] bg-orange-50 ring-1 ring-[#F15A22]'
                       : 'border-gray-200 hover:border-gray-300 bg-white'
                   }`}
                 >
@@ -160,7 +141,7 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
             </div>
           </div>
 
-          {/* Descripcion */}
+          {/* Descripción */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1.5">
               Descripción de la actividad <span className="text-red-500">*</span>
@@ -168,11 +149,10 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
             <textarea
               className="input-field resize-none"
               rows={4}
-              placeholder="Describe detalladamente la actividad de mercadeo: qué vas a hacer, dónde, cuándo y para qué sirve para el crecimiento de Prolub en tu zona..."
+              placeholder="Describe detalladamente la actividad: qué vas a hacer, dónde, cuándo y para qué..."
               value={form.descripcion}
               onChange={(e) => handleField('descripcion', e.target.value)}
-              required
-              minLength={20}
+              required minLength={20}
             />
             <p className="text-xs text-gray-400 mt-1">{form.descripcion.length} / mín. 20 caracteres</p>
           </div>
@@ -189,7 +169,6 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
                 className="input-field pl-7"
                 placeholder="0"
                 min={1}
-                max={saldoDisponible}
                 value={form.monto_solicitado}
                 onChange={(e) => handleField('monto_solicitado', e.target.value)}
                 required
@@ -200,6 +179,22 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
             )}
           </div>
 
+          {/* Correo de contacto */}
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+              Correo de contacto <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="email"
+              className="input-field"
+              placeholder="tucorreo@empresa.com — para que te respondamos"
+              value={form.correo_contacto}
+              onChange={(e) => handleField('correo_contacto', e.target.value)}
+              required
+            />
+            <p className="text-xs text-gray-400 mt-1">El equipo Prolub te responderá a este correo.</p>
+          </div>
+
           {/* Observaciones */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1.5">
@@ -208,7 +203,7 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
             <textarea
               className="input-field resize-none"
               rows={2}
-              placeholder="(Opcional) Información adicional relevante para la aprobación..."
+              placeholder="(Opcional) Información adicional..."
               value={form.observaciones}
               onChange={(e) => handleField('observaciones', e.target.value)}
             />
@@ -234,32 +229,29 @@ export default function NuevaSolicitud({ distribuidor, saldoDisponible, onCreada
             />
           </div>
 
-          {/* Summary */}
+          {/* Resumen */}
           {form.tipo_actividad && form.monto_solicitado && (
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Resumen de solicitud</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Resumen</p>
               <div className="flex justify-between items-center">
                 <p className="text-sm text-gray-700">{form.tipo_actividad}</p>
                 <p className="text-base font-bold text-gray-900">{formatCOP(Number(form.monto_solicitado) || 0)}</p>
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Se notificará automáticamente a tu ejecutivo comercial y al equipo Prolub.
+                Se notificará a tu comercial Prolub, al jefe de mercadeo y a msilva@prolub.com.co
               </p>
             </div>
           )}
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary flex items-center gap-2 flex-1 justify-center"
-            >
-              {loading && (
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              )}
-              {loading ? 'Enviando solicitud...' : '📤 Enviar solicitud'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#F15A22] text-white font-black text-sm tracking-widest uppercase py-3.5 rounded-xl hover:bg-[#d94e1a] transition-colors flex items-center justify-center gap-2 active:scale-95"
+            style={{ fontFamily: 'Arial Black, sans-serif' }}
+          >
+            {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {loading ? 'ENVIANDO...' : '📤 ENVIAR SOLICITUD →'}
+          </button>
         </form>
       </div>
     </div>
@@ -270,10 +262,7 @@ function FileUpload({ label, hint, accept, file, onChange, required }) {
   const handleChange = (e) => {
     const f = e.target.files?.[0]
     if (f) {
-      if (f.size > 10 * 1024 * 1024) {
-        toast.error('El archivo no puede superar 10MB.')
-        return
-      }
+      if (f.size > 10 * 1024 * 1024) { toast.error('El archivo no puede superar 10MB.'); return }
       onChange(f)
     }
   }
@@ -290,12 +279,12 @@ function FileUpload({ label, hint, accept, file, onChange, required }) {
         {file ? (
           <div className="text-center px-2">
             <p className="text-xs text-green-700 font-semibold">✓ {file.name.length > 24 ? file.name.substring(0, 22) + '...' : file.name}</p>
-            <p className="text-xs text-green-600 mt-0.5">{(file.size / 1024).toFixed(0)} KB · Cambiar archivo</p>
+            <p className="text-xs text-green-600 mt-0.5">{(file.size / 1024).toFixed(0)} KB · Cambiar</p>
           </div>
         ) : (
           <div className="text-center">
             <p className="text-2xl mb-1">📎</p>
-            <p className="text-xs text-gray-600 font-medium">Adjuntar {label}</p>
+            <p className="text-xs text-gray-600 font-medium">{label}</p>
             <p className="text-xs text-gray-400">{hint}</p>
           </div>
         )}
