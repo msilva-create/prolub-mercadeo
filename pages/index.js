@@ -65,24 +65,17 @@ export default function Login() {
 
         {/* Logo Gulf */}
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full border-4 border-[#1B3A6B] bg-white shadow-lg mb-5">
-            <svg viewBox="0 0 100 100" width="72" height="72">
-              <circle cx="50" cy="50" r="48" fill="#F15A22" stroke="#1B3A6B" strokeWidth="4"/>
-              <circle cx="50" cy="50" r="34" fill="white"/>
-              <text x="50" y="57" textAnchor="middle" fill="#1B3A6B"
-                style={{ fontSize: '22px', fontWeight: '800', fontFamily: 'Arial Black, sans-serif' }}>
-                Gulf
-              </text>
-            </svg>
+          <div className="mb-5">
+            <img src="https://i.postimg.cc/SxWkYzGz/Gulf-Oil-logo-svg.png" alt="Gulf Logo" className="w-28 h-28 object-contain drop-shadow-lg" />
           </div>
 
           {step === 'select' ? (
             <>
-              <h1 className="text-3xl font-black text-[#1B3A6B] italic"
+              <h1 className="text-2xl font-black text-[#1B3A6B] italic text-center"
                 style={{ fontFamily: 'Arial Black, sans-serif' }}>
-                GULF APOYA TU NEGOCIO
+                GULF / PROLUB ACELERAN EL CRECIMIENTO DE TU NEGOCIO
               </h1>
-              <p className="text-gray-400 text-sm mt-2 max-w-sm mx-auto">
+              <p className="text-gray-400 text-sm mt-2 max-w-sm mx-auto text-center">
                 Gestiona tu fondo de mercadeo y activa actividades que impulsan tus ventas Gulf.
               </p>
             </>
