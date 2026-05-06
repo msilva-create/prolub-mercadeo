@@ -65,7 +65,7 @@ export default function Login() {
 
         {/* Logo Gulf */}
         <div className="mb-8 text-center">
-          <div className="mb-5">
+          <div className="mb-5 flex justify-center">
             <img src="https://i.postimg.cc/SxWkYzGz/Gulf-Oil-logo-svg.png" alt="Gulf Logo" className="w-28 h-28 object-contain drop-shadow-lg" />
           </div>
 
