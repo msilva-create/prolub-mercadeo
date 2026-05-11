@@ -29,12 +29,13 @@ const DISTRIBUIDORES_NOMBRES = {
 export default function Admin() {
   const router = useRouter()
   const [solicitudes, setSolicitudes] = useState([])
+  const [legalizaciones, setLegalizaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState('todos')
   const [filtroDist, setFiltroDist] = useState('todos')
   const [modalSolicitud, setModalSolicitud] = useState(null)
   const [saldos, setSaldos] = useState({})
-  const [vistaAdmin, setVistaAdmin] = useState('solicitudes') // solicitudes | saldos
+  const [vistaAdmin, setVistaAdmin] = useState('solicitudes') // solicitudes | saldos | legalizaciones
 
   useEffect(() => {
     const stored = sessionStorage.getItem('prolub_user')
@@ -43,6 +44,7 @@ export default function Admin() {
     if (u.rol !== 'admin') { router.push('/dashboard'); return }
     cargarSolicitudes()
     cargarSaldos()
+    cargarLegalizaciones()
   }, [])
 
   async function cargarSolicitudes() {
@@ -61,6 +63,14 @@ export default function Admin() {
     setSaldos(map)
   }
 
+  async function cargarLegalizaciones() {
+    const { data } = await supabase
+      .from('legalizaciones')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setLegalizaciones(data || [])
+  }
+
   async function actualizarEstado(id, nuevoEstado, nota, solicitud) {
     const { error } = await supabase
       .from('solicitudes')
@@ -69,7 +79,6 @@ export default function Admin() {
 
     if (error) { toast.error('Error actualizando estado'); return }
 
-    // Enviar correo al distribuidor si tiene correo de contacto
     if (solicitud.correo_contacto && (nuevoEstado === 'aprobado' || nuevoEstado === 'rechazado' || nuevoEstado === 'ejecutado')) {
       try {
         await fetch('/api/notificar-respuesta', {
@@ -95,6 +104,20 @@ export default function Admin() {
 
     setModalSolicitud(null)
     cargarSolicitudes()
+  }
+
+  async function actualizarEstadoLegalizacion(id, nuevoEstado) {
+    const { error } = await supabase
+      .from('legalizaciones')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+
+    if (error) {
+      toast.error('Error al actualizar legalización')
+    } else {
+      toast.success('Legalización actualizada')
+      cargarLegalizaciones()
+    }
   }
 
   async function actualizarSaldo(distribuidorId, nuevoSaldo) {
@@ -133,7 +156,6 @@ export default function Admin() {
     <div className="min-h-screen bg-[#F0F2F5]">
       <div className="h-1 bg-gradient-to-r from-[#1B3A6B] via-[#F15A22] to-[#1B3A6B]" />
 
-      {/* Header */}
       <header className="bg-[#1B3A6B] sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -159,7 +181,6 @@ export default function Admin() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
 
-        {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
             { label: 'Pendientes', value: solicitudes.filter(s => s.estado === 'pendiente').length, sub: formatCOP(totalPendiente), color: 'border-l-amber-400' },
@@ -175,11 +196,11 @@ export default function Admin() {
           ))}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl p-1 mb-6 shadow-sm border border-gray-100 max-w-xs">
+        <div className="flex gap-1 bg-white rounded-xl p-1 mb-6 shadow-sm border border-gray-100 max-w-md">
           {[
             { key: 'solicitudes', label: 'Solicitudes' },
             { key: 'saldos', label: 'Saldos' },
+            { key: 'legalizaciones', label: 'Legalizaciones' },
           ].map(t => (
             <button
               key={t.key}
@@ -195,7 +216,6 @@ export default function Admin() {
 
         {vistaAdmin === 'solicitudes' && (
           <div>
-            {/* Filtros */}
             <div className="flex flex-wrap gap-3 mb-4">
               <select className="input-field max-w-xs text-sm" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
                 <option value="todos">Todos los estados</option>
@@ -212,7 +232,6 @@ export default function Admin() {
               </select>
             </div>
 
-            {/* Tabla */}
             <div className="card p-0 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -253,6 +272,49 @@ export default function Admin() {
         {vistaAdmin === 'saldos' && (
           <SaldosPanel saldos={saldos} onActualizar={actualizarSaldo} />
         )}
+
+        {vistaAdmin === 'legalizaciones' && (
+          <div className="card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {['Distribuidor', 'Galones', 'Efectividad', 'Factura', 'Estado', 'Acciones'].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {legalizaciones.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-gray-400">No hay legalizaciones pendientes</td></tr>
+                  ) : legalizaciones.map(l => (
+                    <tr key={l.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-[#1B3A6B]">{DISTRIBUIDORES_NOMBRES[l.distribuidor_id] || l.distribuidor_id}</td>
+                      <td className="px-4 py-3 text-gray-700">{l.galones_impactados}</td>
+                      <td className="px-4 py-3 text-gray-700">{l.efectividad}</td>
+                      <td className="px-4 py-3">
+                        {l.factura_url && <a href={l.factura_url} target="_blank" className="text-[#F15A22] underline font-medium">Ver Factura</a>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${l.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                          {l.estado}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 flex gap-2">
+                        {l.estado === 'pendiente' && (
+                          <>
+                            <button onClick={() => actualizarEstadoLegalizacion(l.id, 'aprobado')} className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 transition-colors">Aprobar</button>
+                            <button onClick={() => actualizarEstadoLegalizacion(l.id, 'rechazado')} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 transition-colors">Rechazar</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
 
       {modalSolicitud && (
@@ -286,7 +348,6 @@ function ModalGestion({ solicitud: s, onClose, onActualizar }) {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Info */}
           <div className="bg-gray-50 rounded-xl p-4">
             <p className="text-xs text-gray-500 mb-3 font-semibold uppercase tracking-wider">Detalle</p>
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -298,7 +359,6 @@ function ModalGestion({ solicitud: s, onClose, onActualizar }) {
             <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-gray-200">{s.descripcion}</p>
           </div>
 
-          {/* Archivos */}
           <div className="flex gap-3">
             {s.soporte_url && (
               <a href={s.soporte_url} target="_blank" rel="noopener noreferrer"
@@ -314,7 +374,6 @@ function ModalGestion({ solicitud: s, onClose, onActualizar }) {
             )}
           </div>
 
-          {/* Estado */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-2">Actualizar estado</label>
             <div className="grid grid-cols-4 gap-2">
@@ -337,7 +396,6 @@ function ModalGestion({ solicitud: s, onClose, onActualizar }) {
             </div>
           </div>
 
-          {/* Nota */}
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1.5">
               Nota para el distribuidor
