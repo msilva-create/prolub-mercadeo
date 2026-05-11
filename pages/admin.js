@@ -24,6 +24,8 @@ const DISTRIBUIDORES = {
   'grupo-motor':    'GRUPO MOTOR',
   'ramos-dist':     'RAMOS DISTRIBUCIONES',
   'cvc-servitecas': 'CVC SERVITECAS',
+  'inversiones-ob': 'INVERSIONES O.B. S.A.S.',
+  'lubricartagena': 'LUBRICARTAGENA S.A.S.',
   'prueba':         'PRUEBA',
 }
 
