@@ -14,6 +14,8 @@ export const DISTRIBUIDORES = [
   { id: 'ramos-dist',      nombre: 'RAMOS DISTRIBUCIONES',     password: 'Gulf2024*RD' },
   { id: 'prueba',          nombre: 'PRUEBA',                   password: 'Gulf2024*PR' },
   { id: 'cvc-servitecas',  nombre: 'CVC SERVITECAS',           password: 'Gulf2024*CV' },
+  { id: 'inversiones-ob', nombre: 'INVERSIONES O.B. S.A.S.',  password: 'Gulf2024*OB' },
+  { id: 'lubricartagena', nombre: 'LUBRICARTAGENA S.A.S.',     password: 'Gulf2024*LC2' },
 ]
 
 // Contraseña del admin
