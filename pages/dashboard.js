@@ -4,10 +4,10 @@ import { supabase } from '../lib/supabase'
 import NuevaSolicitud from '../components/NuevaSolicitud'
 import HistorialSolicitudes from '../components/HistorialSolicitudes'
 import toast from 'react-hot-toast'
- 
+
 const formatCOP = (n) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0)
- 
+
 export default function Dashboard() {
   const router = useRouter()
   const [user, setUser] = useState(null)
@@ -15,7 +15,7 @@ export default function Dashboard() {
   const [solicitudes, setSolicitudes] = useState([])
   const [vista, setVista] = useState('home')
   const [loading, setLoading] = useState(true)
- 
+
   useEffect(() => {
     const stored = sessionStorage.getItem('prolub_user')
     if (!stored) { router.push('/'); return }
@@ -24,16 +24,17 @@ export default function Dashboard() {
     setUser(u)
     cargarDatos(u.id)
   }, [])
- 
+
   async function cargarDatos(distribuidorId) {
     const { data: dist } = await supabase
       .from('distribuidores')
       .select('*')
       .eq('distribuidor_id', distribuidorId)
       .single()
- 
+
     if (dist) setDistribuidor(dist)
     else {
+      // Si no existe aún en Supabase, crear perfil automáticamente
       const { data: nuevo } = await supabase
         .from('distribuidores')
         .insert({ distribuidor_id: distribuidorId, saldo_disponible: 0 })
@@ -41,27 +42,27 @@ export default function Dashboard() {
         .single()
       setDistribuidor(nuevo)
     }
- 
+
     const { data: sols } = await supabase
       .from('solicitudes')
       .select('*')
       .eq('distribuidor_id', distribuidorId)
       .order('created_at', { ascending: false })
- 
+
     setSolicitudes(sols || [])
     setLoading(false)
   }
- 
+
   function handleLogout() {
     sessionStorage.removeItem('prolub_user')
     router.push('/')
   }
- 
+
   function onSolicitudCreada() {
     cargarDatos(user.id)
     setVista('historial')
   }
- 
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="text-center">
@@ -70,17 +71,17 @@ export default function Dashboard() {
       </div>
     </div>
   )
- 
+
   const saldoTotal = distribuidor?.saldo_disponible || 0
   const totalSolicitado = solicitudes
     .filter(s => ['pendiente', 'aprobado', 'ejecutado'].includes(s.estado))
     .reduce((a, s) => a + (s.monto_solicitado || 0), 0)
   const saldoDisponible = saldoTotal - totalSolicitado
- 
+
   return (
     <div className="min-h-screen bg-[#F0F2F5]">
       <div className="h-1 bg-gradient-to-r from-[#1B3A6B] via-[#F15A22] to-[#1B3A6B]" />
- 
+
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -103,9 +104,9 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
- 
+
       <main className="max-w-5xl mx-auto px-4 py-8">
- 
+
         {/* Balance */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="card border-l-4 border-l-[#1B3A6B]">
@@ -126,9 +127,9 @@ export default function Dashboard() {
             <p className="text-xs text-gray-400 mt-1">Para nuevas actividades</p>
           </div>
         </div>
- 
+
         {/* Nav */}
-        <div className="flex gap-1 bg-white rounded-xl p-1 mb-6 shadow-sm border border-gray-100 max-sm">
+        <div className="flex gap-1 bg-white rounded-xl p-1 mb-6 shadow-sm border border-gray-100 max-w-sm">
           {[
             { key: 'home', label: 'Inicio' },
             { key: 'nueva', label: '+ Solicitud' },
@@ -145,7 +146,7 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
- 
+
         {vista === 'home' && (
           <HomeView user={user} solicitudes={solicitudes} onNueva={() => setVista('nueva')} onHistorial={() => setVista('historial')} />
         )}
@@ -159,12 +160,12 @@ export default function Dashboard() {
     </div>
   )
 }
- 
+
 function HomeView({ user, solicitudes, onNueva, onHistorial }) {
   const pendientes = solicitudes.filter(s => s.estado === 'pendiente').length
   const aprobadas = solicitudes.filter(s => s.estado === 'aprobado').length
   const rechazadas = solicitudes.filter(s => s.estado === 'rechazado').length
- 
+
   return (
     <div className="space-y-6">
       <div className="card bg-gradient-to-r from-[#1B3A6B] to-[#0f2347] text-white border-0">
@@ -174,7 +175,7 @@ function HomeView({ user, solicitudes, onNueva, onHistorial }) {
           Crear nueva solicitud →
         </button>
       </div>
- 
+
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Resumen</h3>
         <div className="grid grid-cols-3 gap-3">
@@ -190,7 +191,7 @@ function HomeView({ user, solicitudes, onNueva, onHistorial }) {
           ))}
         </div>
       </div>
- 
+
       {solicitudes.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Últimas solicitudes</h3>
