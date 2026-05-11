@@ -35,7 +35,7 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
 
-    // Check admin
+    // Check admin password
     if (password === ADMIN_PASSWORD) {
       sessionStorage.setItem('prolub_user', JSON.stringify({ rol: 'admin', nombre: 'Admin' }))
       router.push('/admin')
@@ -44,6 +44,12 @@ export default function Login() {
 
     // Check distribuidor
     if (password === distribuidor.password) {
+      // Central Gulf va al panel admin
+      if (distribuidor.id === 'central-gulf') {
+        sessionStorage.setItem('prolub_user', JSON.stringify({ rol: 'admin', nombre: 'CENTRAL GULF' }))
+        router.push('/admin')
+        return
+      }
       sessionStorage.setItem('prolub_user', JSON.stringify({
         rol: 'distribuidor',
         id: distribuidor.id,
