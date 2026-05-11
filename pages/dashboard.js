@@ -34,7 +34,6 @@ export default function Dashboard() {
  
     if (dist) setDistribuidor(dist)
     else {
-      // Si no existe aún en Supabase, crear perfil automáticamente
       const { data: nuevo } = await supabase
         .from('distribuidores')
         .insert({ distribuidor_id: distribuidorId, saldo_disponible: 0 })
@@ -51,6 +50,30 @@ export default function Dashboard() {
  
     setSolicitudes(sols || [])
     setLoading(false)
+  }
+
+  // --- SOLO AGREGUÉ ESTA FUNCIÓN PARA EL EXCEL ---
+  async function cargarMasivoExcel() {
+    const confirmacion = confirm("¿Deseas cargar los saldos del Excel ahora mismo?");
+    if (!confirmacion) return;
+
+    const datosExcel = [
+      { id: 'cvc-servitecas', saldo: 2527484 },
+      { id: 'los-lagos', saldo: 1274881 },
+      { id: 'inversiones-ob', saldo: 1469740 },
+      { id: 'lubricartagena', saldo: 1333789 },
+      { id: 'ramos-dist', saldo: 2251964 },
+      { id: 'universal', saldo: 4700000 }
+    ];
+
+    for (const item of datosExcel) {
+      await supabase.from('distribuidores').upsert({ 
+        distribuidor_id: item.id, 
+        saldo_disponible: item.saldo 
+      }, { onConflict: 'distribuidor_id' });
+    }
+    toast.success('Saldos cargados con éxito');
+    cargarDatos(user.id);
   }
  
   function handleLogout() {
@@ -106,6 +129,21 @@ export default function Dashboard() {
       </header>
  
       <main className="max-w-5xl mx-auto px-4 py-8">
+
+        {/* --- SOLO AGREGUÉ ESTE BLOQUE PARA EL BOTÓN NARANJA --- */}
+        {user?.id === 'central-gulf' && (
+          <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center">
+            <p className="text-sm text-orange-800 font-medium italic text-center sm:text-left">
+              Herramienta de control: Carga los saldos de la imagen de Excel.
+            </p>
+            <button 
+              onClick={cargarMasivoExcel}
+              className="bg-[#F15A22] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#d94e1a] shadow-md"
+            >
+              🚀 Cargar Saldos Excel
+            </button>
+          </div>
+        )}
  
         {/* Balance */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
